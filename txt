@@ -1,0 +1,16 @@
+From now on make sure you will use this openai api logic
+This is the new way how it works.
+
+    # Initialize the OpenAI client
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))   
+
+    #completion 
+
+    completion = client.chat.completions.create(
+        model="gpt-4o",
+        messages=messages
+    )
+
+    # Extract the response
+    assistant_response = completion.choices[0].message.content
+

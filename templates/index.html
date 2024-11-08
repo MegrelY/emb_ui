@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot Interface</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h2>Ask Avatar Peter</h2>
+        <textarea id="userInput" placeholder="Type your message here..."></textarea>
+        <button onclick="sendMessage()">Send</button>
+        
+        <h3>Chatbot Response:</h3>
+        <div id="responseBox" class="response-box"></div>
+
+        <h3>Reference URLs:</h3>
+        <div id="urlBox" class="url-box"></div>
+    </div>
+
+    <script>
+        function sendMessage() {
+            const message = document.getElementById("userInput").value;
+            fetch("/chat", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ message: message })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById("responseBox").textContent = data.response;
+                document.getElementById("urlBox").innerHTML = "";
+                data.urls.forEach(url => {
+                    const link = document.createElement("a");
+                    link.href = url;
+                    link.target = "_blank";
+                    link.textContent = url;
+                    document.getElementById("urlBox").appendChild(link);
+                    document.getElementById("urlBox").appendChild(document.createElement("br"));
+                });
+            })
+            .catch(error => console.error("Error:", error));
+        }
+    </script>
+</body>
+</html>
