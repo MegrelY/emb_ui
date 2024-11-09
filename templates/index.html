@@ -9,14 +9,15 @@
 <body>
     <div class="container">
         <h2>Ask Avatar Peter</h2>
-        <textarea id="userInput" placeholder="Type your message here..."></textarea>
-        <button onclick="sendMessage()">Send</button>
-        
-        <h3>Chatbot Response:</h3>
-        <div id="responseBox" class="response-box"></div>
 
-        <h3>Reference URLs:</h3>
-        <div id="urlBox" class="url-box"></div>
+        <!-- Scrollable conversation area -->
+        <div id="combinedBox" class="response-box"></div>
+
+        <!-- Fixed input area below the conversation -->
+        <div class="input-area">
+            <textarea id="userInput" placeholder="Type your message here..."></textarea>
+            <button onclick="sendMessage()">Send</button>
+        </div>
     </div>
 
     <script>
@@ -31,16 +32,30 @@
             })
             .then(response => response.json())
             .then(data => {
-                document.getElementById("responseBox").textContent = data.response;
-                document.getElementById("urlBox").innerHTML = "";
-                data.urls.forEach(url => {
-                    const link = document.createElement("a");
-                    link.href = url;
-                    link.target = "_blank";
-                    link.textContent = url;
-                    document.getElementById("urlBox").appendChild(link);
-                    document.getElementById("urlBox").appendChild(document.createElement("br"));
+                // Build combined conversation content
+                let combinedContent = "";
+                
+                // Loop through each conversation entry to build the conversation history
+                data.conversation_history.forEach(entry => {
+                    combinedContent += `<p><strong>You:</strong> ${entry.user}</p>`;
+                    combinedContent += `<p><strong>Avatar Peter:</strong> ${entry.assistant}</p>`;
+                    combinedContent += `<h4>Reference URLs:</h4>`;
+                    
+                    // Add each URL as a clickable link
+                    entry.urls.forEach(url => {
+                        combinedContent += `<a href="${url}" target="_blank">${url}</a><br>`;
+                    });
+                    combinedContent += "<hr>";  // Separator for each conversation entry
                 });
+
+                // Update the response box with the full conversation history
+                document.getElementById("combinedBox").innerHTML = combinedContent;
+
+                // Scroll to the bottom of the response box
+                document.getElementById("combinedBox").scrollTop = document.getElementById("combinedBox").scrollHeight;
+
+                // Clear the user input
+                document.getElementById("userInput").value = "";
             })
             .catch(error => console.error("Error:", error));
         }

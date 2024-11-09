@@ -48,10 +48,10 @@ def generate_query_embedding(query, model="text-embedding-3-small"):
 def cosine_similarity(a, b):
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
-def find_similar_documents(session: Session, query_embedding, top_k=5):
+def find_similar_documents(session: Session, query_embedding, top_k=3):
     """Find documents in the database that are most similar to the query embedding."""
     documents = session.query(
-        Document.id, Document.title, Document.headings, Document.paragraphs, Document.url, Document.embedding
+        Document.id, Document.title, Document.headings, Document.paragraphs, Document.url, Document.embedding, Document.lists 
     ).all()
 
     # Calculate cosine similarity between query and document embeddings
@@ -65,69 +65,37 @@ def find_similar_documents(session: Session, query_embedding, top_k=5):
     similarities = sorted(similarities, key=lambda x: x[-1], reverse=True)[:top_k]
     return similarities
 
-def ongoing_conversation(session):
-    """
-    Start a conversation with GPT-4o, using relevant document context from the database.
-    """
-    print("What would you like to ask Avatar Peter today? Type 'exit', 'quit', or 'bye' to end the conversation.")
+def get_response_with_context(user_input, session):
+    """Generate response from OpenAI with relevant document context."""
+    query_embedding = generate_query_embedding(user_input)
+    if query_embedding is None:
+        return "Failed to generate embedding for the query.", []
+
+    # Find similar documents based on embeddings
+    similar_docs = find_similar_documents(session, query_embedding, top_k=3)
+    
+    # Create context from the most similar documents
+    context = "\n\n".join(
+        [
+            f"Title: {doc[1]}\nHeadings: {doc[2]}\nParagraphs: {doc[3]}\nURL: {doc[4]}"
+            for doc in similar_docs
+        ]
+    )
+
     messages = [
-        {"role": "system", "content": "You are a helpful assistant identified as the Peter Attia's avatar. Answer the user's questions based on the relevant context provided from the documents. Include source URLs in your response if relevant. Do not answer questions outside the scope of the context."}
+        {"role": "system", "content": f"Relevant context: {context}"},
+        {"role": "user", "content": user_input}
     ]
 
-    while True:
-        # Get user input
-        user_input = input("You: ")
-
-        # Check if the user wants to exit
-        if user_input.lower() in ['exit', 'quit', 'bye']:
-            print("Avatar Peter: Goodbye!")
-            break
-
-        # Generate embedding for the user's query
-        query_embedding = generate_query_embedding(user_input)
-        if query_embedding is None:
-            print("Failed to generate embedding for the query.")
-            continue
-
-        # Find similar documents based on embeddings
-        similar_docs = find_similar_documents(session, query_embedding, top_k=3)
-        
-        # Create context from the most similar documents
-        context = "\n\n".join(
-            [
-                f"Title: {doc[1]}\nHeadings: {doc[2]}\nParagraphs: {doc[3]}\nURL: {doc[4]}"
-                for doc in similar_docs
-            ]
-        )
-
-        # Add the context to the conversation
-        messages.append({"role": "system", "content": f"Relevant context: {context}"})
-        messages.append({"role": "user", "content": user_input})
-
-        # Get the assistant's response using OpenAI API
-        try:
-            completion = client.chat.completions.create(
-                model="gpt-4o",
-                messages=messages
-            )
-
-            # Extract the response
-            assistant_response = completion.choices[0].message.content
-            print(f"Avatar Peter: {assistant_response}")
-
-            # Append the assistant's response to the conversation history
-            messages.append({"role": "assistant", "content": assistant_response})
-
-        except Exception as e:
-            print(f"An error occurred: {e}")
-
-
-if __name__ == "__main__":
-    # Initialize a session to interact with the database
-    session = SessionLocal()
-
+    # Get the assistant's response using OpenAI API
     try:
-        ongoing_conversation(session)
-    finally:
-        # Close the session when done
-        session.close()
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=messages
+        )
+        assistant_response = completion.choices[0].message.content
+        reference_urls = [doc[4] for doc in similar_docs]
+        return assistant_response, reference_urls
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return "An error occurred while processing your request.", []

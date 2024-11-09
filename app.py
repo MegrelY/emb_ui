@@ -1,14 +1,13 @@
-from flask import Flask, render_template, request, jsonify
-from openai import OpenAI
-import os
+from flask import Flask, render_template, request, jsonify, session
 from sqlalchemy.orm import Session
-from chatsql_emb_url import SessionLocal, find_similar_documents, generate_query_embedding
+from chatsql_emb_url import SessionLocal, get_response_with_context
+from flask_session import Session as FlaskSession
 
-# Initialize Flask app
+# Initialize Flask app and session
 app = Flask(__name__)
-
-# Load OpenAI API key
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+app.config['SECRET_KEY'] = 'supersecretkey'
+app.config['SESSION_TYPE'] = 'filesystem'
+FlaskSession(app)
 
 @app.route('/')
 def index():
@@ -17,42 +16,29 @@ def index():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """Handle the chat request from the UI and return the chatbot response and reference URL."""
+    """Handle the chat request from the UI and return the updated chatbot conversation history and reference URLs."""
     user_input = request.json.get('message')
     
-    # Generate query embedding
-    session = SessionLocal()
-    query_embedding = generate_query_embedding(user_input)
-    
-    # Find similar documents to get reference URLs
-    similar_docs = find_similar_documents(session, query_embedding, top_k=3)
-    session.close()
+    # Initialize conversation history if it doesn't exist in session
+    if 'conversation_history' not in session:
+        session['conversation_history'] = []
 
-    # Format the context for the chatbot with retrieved documents
-    context = "\n\n".join([
-        f"Title: {doc[1]}\nHeadings: {doc[2]}\nParagraphs: {doc[3]}\nURL: {doc[4]}"
-        for doc in similar_docs
-    ])
+    # Start a database session
+    db_session = SessionLocal()
     
-    # Send context to OpenAI API to get response
-    messages = [
-        {"role": "system", "content": f"Relevant context: {context}"},
-        {"role": "user", "content": user_input}
-    ]
-    
-    try:
-        completion = client.chat.completions.create(
-            model="gpt-4o",
-            messages=messages
-        )
-        assistant_response = completion.choices[0].message.content
+    # Get response with context
+    assistant_response, reference_urls = get_response_with_context(user_input, db_session)
+    db_session.close()
 
-        # Prepare URL list to send back
-        reference_urls = [doc[4] for doc in similar_docs]
+    # Append user input and response to the session conversation history
+    session['conversation_history'].append({
+        "user": user_input,
+        "assistant": assistant_response,
+        "urls": reference_urls
+    })
 
-        return jsonify({"response": assistant_response, "urls": reference_urls})
-    except Exception as e:
-        return jsonify({"error": f"An error occurred: {e}"}), 500
+    # Return the entire conversation history
+    return jsonify({"conversation_history": session['conversation_history']})
 
 if __name__ == "__main__":
     app.run(debug=True)
