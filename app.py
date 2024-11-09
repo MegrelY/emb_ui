@@ -12,6 +12,7 @@ FlaskSession(app)
 @app.route('/')
 def index():
     """Render the main UI for the chatbot."""
+    session['conversation_history'] = []  # Clear the conversation history on each new session
     return render_template('index.html')
 
 @app.route('/chat', methods=['POST'])
